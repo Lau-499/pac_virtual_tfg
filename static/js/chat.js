@@ -3,10 +3,12 @@ const formulario = document.getElementById("formulario");
 const entrada = document.getElementById("mensaje");
 const conversacion = document.getElementById("conversacion");
 const boton = document.getElementById("enviar");
-const botonNuevaConversacion = document.getElementById("nueva-conversacion");
 
-// Aquí guardaremos todos los mensajes
-let historial = [];
+const botonNuevaConversacion =
+    document.getElementById("nueva-conversacion");
+
+let conversacionId = null;
+let ocupado = false;
 
 
 function mostrarMensaje(autor, texto, clase) {
@@ -20,72 +22,101 @@ function mostrarMensaje(autor, texto, clase) {
 }
 
 
+function bloquearInterfaz(bloqueada) {
+    ocupado = bloqueada;
+    boton.disabled = bloqueada;
+    botonNuevaConversacion.disabled = bloqueada;
+}
+
+
+async function crearConversacion() {
+    const respuesta = await fetch("/nueva-conversacion", {
+        method: "POST"
+    });
+
+    const datos = await respuesta.json();
+
+    if (!respuesta.ok) {
+        throw new Error(
+            datos.error || "No se pudo crear la conversación."
+        );
+    }
+
+    conversacionId = datos.conversacion_id;
+}
+
+
 formulario.addEventListener("submit", async function(evento) {
     evento.preventDefault();
 
     const mensaje = entrada.value.trim();
-    if (!mensaje || boton.disabled) return;
 
-    // Añadir el mensaje del usuario al historial
-    historial.push({
-        role: "user",
-        content: mensaje
-    });
+    if (!mensaje || ocupado) return;
 
-    mostrarMensaje("Tú", mensaje, "usuario");
-
-    entrada.value = "";
-    boton.disabled = true;
+    bloquearInterfaz(true);
 
     try {
+        // Crear la conversación al enviar
+        // el primer mensaje.
+        if (conversacionId === null) {
+            await crearConversacion();
+        }
+
         const respuesta = await fetch("/chat", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                historial: historial
+                conversacion_id: conversacionId,
+                mensaje: mensaje
             })
         });
 
         const datos = await respuesta.json();
 
         if (!respuesta.ok) {
-            throw new Error(datos.error || "Error del servidor");
+            throw new Error(
+                datos.error || "Error del servidor."
+            );
         }
 
-        // Guardar también la respuesta de DeepSeek
-        historial.push({
-            role: "assistant",
-            content: datos.respuesta
-        });
+        mostrarMensaje("Tú", mensaje, "usuario");
 
-        mostrarMensaje("DeepSeek", datos.respuesta, "ia");
+        mostrarMensaje(
+            "DeepSeek",
+            datos.respuesta,
+            "ia"
+        );
+
+        entrada.value = "";
 
     } catch (error) {
-        // Si falla la petición, retirar el mensaje
-        // para poder intentarlo de nuevo
-        historial.pop();
-
-        mostrarMensaje("Error", error.message, "ia");
+        mostrarMensaje(
+            "Error",
+            error.message,
+            "error"
+        );
 
     } finally {
-        boton.disabled = false;
+        bloquearInterfaz(false);
         entrada.focus();
     }
 });
 
-botonNuevaConversacion.addEventListener("click", function() {
-    if (boton.disabled) return;
 
-    // Borrar el historial de mensajes
-    historial = [];
+botonNuevaConversacion.addEventListener(
+    "click",
+    function() {
+        if (ocupado) return;
 
-    // Limpiar los mensajes de la pantalla
-    conversacion.innerHTML = "";
+        // La conversación anterior permanece
+        // guardada en MongoDB.
+        conversacionId = null;
 
-    // Limpiar el campo de texto
-    entrada.value = "";
-
-    entrada.focus();
-});
+        // Limpiar la pantalla actual.
+        conversacion.innerHTML = "";
+        entrada.value = "";
+        entrada.focus();
+    }
+);

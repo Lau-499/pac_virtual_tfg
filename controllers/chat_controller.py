@@ -1,6 +1,11 @@
 
 from flask import Blueprint, request, jsonify, session
+
 from services.deepseek_service import obtener_respuesta
+from services.mongo_service import (
+    obtener_conversacion,
+    guardar_intercambio
+)
 
 chat_bp = Blueprint("chat", __name__)
 
@@ -8,8 +13,7 @@ chat_bp = Blueprint("chat", __name__)
 @chat_bp.route("/chat", methods=["POST"])
 def chat():
 
-    # Comprobar que el usuario está identificado
-    if "usuario" not in session:
+    if "usuario_id" not in session:
         return jsonify({
             "error": "Debes identificarte primero."
         }), 401
@@ -21,61 +25,74 @@ def chat():
             "error": "Solicitud JSON no válida."
         }), 400
 
-    historial = datos.get("historial")
+    conversacion_id = datos.get("conversacion_id")
+    pregunta = datos.get("mensaje")
 
-    # Comprobar que recibimos una lista de mensajes
-    if not isinstance(historial, list) or not historial:
+    if not isinstance(conversacion_id, str):
         return jsonify({
-            "error": "El historial no es válido."
+            "error": "Identificador de conversación no válido."
         }), 400
 
-    # Limitar el tamaño de las solicitudes
-    if len(historial) > 30:
+    if not isinstance(pregunta, str):
         return jsonify({
-            "error": "Demasiados mensajes en el historial."
+            "error": "El mensaje no es válido."
         }), 400
 
-    for mensaje in historial:
-        if not isinstance(mensaje, dict):
-            return jsonify({
-                "error": "Mensaje no válido."
-            }), 400
+    pregunta = pregunta.strip()
 
-        if set(mensaje.keys()) != {"role", "content"}:
-            return jsonify({
-                "error": "Formato de mensaje incorrecto."
-            }), 400
-
-        if mensaje["role"] not in ("user", "assistant"):
-            return jsonify({
-                "error": "Rol no permitido."
-            }), 400
-
-        contenido = mensaje["content"]
-
-        if not isinstance(contenido, str) or not contenido.strip():
-            return jsonify({
-                "error": "Contenido no válido."
-            }), 400
-
-        if len(contenido) > 4000:
-            return jsonify({
-                "error": "Mensaje demasiado largo."
-            }), 400
-
-    if historial[-1]["role"] != "user":
+    if not pregunta or len(pregunta) > 4000:
         return jsonify({
-            "error": "El último mensaje debe ser del usuario."
+            "error": "El mensaje debe tener entre 1 y 4000 caracteres."
         }), 400
 
     try:
-        respuesta = obtener_respuesta(historial)
+        conversacion = obtener_conversacion(
+            conversacion_id,
+            session["usuario_id"]
+        )
+
+        if conversacion is None:
+            return jsonify({
+                "error": "Conversación no encontrada."
+            }), 404
+
+        # Historial guardado en MongoDB
+        historial = conversacion["mensajes"]
+
+        # Enviamos los últimos 28 mensajes anteriores,
+        # más la nueva pregunta.
+        mensajes = historial[-28:] + [
+            {
+                "role": "user",
+                "content": pregunta
+            }
+        ]
+
+        # Obtener respuesta de DeepSeek
+        respuesta = obtener_respuesta(mensajes)
+
+        if not isinstance(respuesta, str) or not respuesta:
+            raise ValueError("Respuesta vacía de DeepSeek")
+
+        # Guardar ambos mensajes en MongoDB
+        guardado = guardar_intercambio(
+            conversacion_id,
+            session["usuario_id"],
+            pregunta,
+            respuesta
+        )
+
+        if not guardado:
+            return jsonify({
+                "error": "No se pudo guardar la conversación."
+            }), 500
 
         return jsonify({
-            "respuesta": respuesta
+            "respuesta": respuesta,
+            "conversacion_id": conversacion_id
         })
 
     except Exception:
         return jsonify({
-            "error": "No se pudo obtener respuesta de DeepSeek."
+            "error": "No se pudo procesar o guardar el mensaje."
         }), 500
