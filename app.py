@@ -1,33 +1,49 @@
 
-import os
-from functools import wraps
-from datetime import datetime, timezone
+import os #Para leer la clave secreta
+from functools import wraps #Para conservar metadatos de una función "decorada"
+from datetime import datetime, timezone #Para registrar la fecha de creación del usuario en UTC
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv #Para cargar variables de entorno desde .env
 from flask import (
     Flask, render_template, request,
     redirect, url_for, session, flash, jsonify
 )
+ # Flask: para crear la aplicación web
+ # render_template: para mostrar archivos HTML
+ # request: leer datos enviados por el navegador
+ # redirect: redirigir a otra página
+ # url_for: generar URLs para rutas
+ # session: mantener el estado de identificación
+ # flash: mostrar mensajes de notificación
+ # jsonify: devolver respuestas JSON
+
+
 from werkzeug.security import (
     generate_password_hash,
     check_password_hash
-)
-from pymongo.errors import DuplicateKeyError
+) 
+# generate_password_hash: para crear un hash seguro de la contraseña
+# check_password_hash: para verificar la contraseña ingresada con el hash almacenado
 
-from controllers.chat_controller import chat_bp
+from pymongo.errors import DuplicateKeyError #Para gestionar identificaciones duplicadas en la base de datos
+
+from controllers.chat_controller import chat_bp #Para registrar las rutas del chat
 from services.mongo_service import (
     usuarios, preparar_indices, crear_conversacion
 )
+# usuarios: Acceder a la colección de usuarios en la base de datos
+# preparar_indices: Crear índices en la colección de usuarios
+# crear_conversacion: Crear una nueva conversación
 
-load_dotenv()
+load_dotenv() #Buscamos un archivo .env y cargamos las variables de entorno en el sistema operativo
 
-app = Flask(__name__)
-app.secret_key = os.environ["SECRET_KEY"]
+app = Flask(__name__) #Crear la aplicación Flask, app es un objeto que podemos configurar y registrar rutas para él
+app.secret_key = os.environ["SECRET_KEY"] #Clave secreta para firmar cookies de sesión y proteger contra ataques de falsificación
 
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_HTTPONLY"] = True #Impide que JavaScript acceda directamente a la cookie.
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax" #Restringe el envío de cookies en determinadas peticiones entre sitios.
 
-preparar_indices()
+preparar_indices() #Prepara los índices en la colección de usuarios en mongoDB
 
 
 def requiere_login(funcion):
@@ -124,7 +140,7 @@ def logout():
     return redirect(url_for("login"))
 
 
-app.register_blueprint(chat_bp)
+app.register_blueprint(chat_bp) # En flask, un "blueprint" permite organizar rutas en diferentes archivos. Aquí, incorporamos las rutas definidas en el controlador a la aplicación chat.
 
 if __name__ == "__main__":
     app.run(debug=False)
