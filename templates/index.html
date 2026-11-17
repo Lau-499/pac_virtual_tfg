@@ -1,0 +1,51 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Chatbot DeepSeek</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+    <h1>Mi chatbot con DeepSeek</h1>
+
+    <div class="barra-usuario">
+        <span>Usuario: {{ usuario }}</span>
+
+        <form action="{{ url_for('logout') }}"
+              method="POST">
+
+            <button type="submit" id="cerrar-sesion">
+                Cerrar sesión
+            </button>
+        </form>
+    </div>
+
+    <button type="button" id="nueva-conversacion">
+        Nueva conversación
+    </button>
+
+    <div id="conversacion"></div>
+
+    <form id="formulario" class="entrada">
+        <input
+            type="text"
+            id="mensaje"
+            placeholder="Escribe tu pregunta..."
+            required
+        >
+
+        <button type="submit" id="enviar">
+            Enviar
+        </button>
+    </form>
+
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+</body>
+</html>
